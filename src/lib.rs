@@ -1,7 +1,11 @@
-use log::{debug, LevelFilter};
+use actor_rotator::set_actor_rotator_hook;
+use log::{debug, info, LevelFilter};
+use physics_update::{physics_values_remove_protection, set_physics_update_hook};
 use simplelog::{
     ColorChoice, CombinedLogger, Config, ConfigBuilder, TermLogger, TerminalMode, WriteLogger,
 };
+use ui_messages_hook::set_message_broadcast_hook;
+
 use std::{ffi::c_void, thread, time::Duration};
 
 use windows::{
@@ -11,13 +15,11 @@ use windows::{
     Win32::{Foundation::HMODULE, System::LibraryLoader::GetModuleHandleA},
 };
 
-use crate::physics_fixer::{
-    dynamic_physics_update, fix_carousel, fix_powerups_rotation, get_p_instance,
-};
+mod actor_rotator;
+mod physics_update;
+mod ui_messages_hook;
 
-mod physics_fixer;
-
-pub static EXE_BASE_ADDR: i32 = 0x00400000;
+pub static EXE_BASE_ADDR: isize = 0x00400000;
 
 #[no_mangle]
 #[allow(non_snake_case)]
@@ -37,101 +39,21 @@ extern "system" fn DllMain(
 pub fn init(module: HMODULE) {
     init_logs();
 
-    log::info!("Hi from: {module:X?}");
+    info!("Hi from: {module:X?}");
 
-    debug!("Disabling memory protection");
+    info!("Installing hooks");
+    set_actor_rotator_hook();
 
-    const TIMESTEP_PTR: i32 = 0x00E648B8;
-    const TIMESTEP_SIZE_PTR: i32 = 0x00E65A2C;
-    const MAX_PHYSICS_UPDATE_PTR: i32 = 0x0111C6A4;
-    const POWERUPS_ROTATION_SPEED: i32 = 0x011BF428;
-
-    const INS_CALL_LEN: isize = 4;
-
-    // Windows will be angry if we write to protected memory!
-    let src_flags = &mut PAGE_PROTECTION_FLAGS::default();
-    let tmp_flags = PAGE_EXECUTE_READWRITE;
-
-    let ptr_base: *mut std::ffi::c_void =
-        unsafe { GetModuleHandleA(PCSTR::null()) }.unwrap().0 as _;
-
-    let ingame_timestep =
-        ptr_base.wrapping_byte_offset((TIMESTEP_PTR - EXE_BASE_ADDR) as isize) as *mut f32;
-    let ingame_timestep_size =
-        ptr_base.wrapping_byte_offset((TIMESTEP_SIZE_PTR - EXE_BASE_ADDR) as isize) as *mut f32;
-    let ingame_max_physics_updates = ptr_base
-        .wrapping_byte_offset((MAX_PHYSICS_UPDATE_PTR - EXE_BASE_ADDR) as isize)
-        as *mut i32;
-    let ingame_bonus_rotation_speed = ptr_base
-        .wrapping_byte_offset((POWERUPS_ROTATION_SPEED - EXE_BASE_ADDR) as isize)
-        as *mut f32;
-
-    unsafe {
-        VirtualProtect(
-            ingame_timestep as _,
-            INS_CALL_LEN as usize,
-            tmp_flags,
-            src_flags,
-        )
-        .unwrap()
-    };
-
-    unsafe {
-        VirtualProtect(
-            ingame_timestep_size as _,
-            INS_CALL_LEN as usize,
-            tmp_flags,
-            src_flags,
-        )
-        .unwrap()
-    };
-
-    unsafe {
-        VirtualProtect(
-            ingame_max_physics_updates as _,
-            INS_CALL_LEN as usize,
-            tmp_flags,
-            src_flags,
-        )
-        .unwrap()
-    };
-
-    unsafe {
-        VirtualProtect(
-            ingame_bonus_rotation_speed as _,
-            INS_CALL_LEN as usize,
-            tmp_flags,
-            src_flags,
-        )
-        .unwrap()
-    };
-
-    log::debug!("Starting update!");
-
-    fix_carousel();
-
-    thread::spawn(|| loop {
-        match get_p_instance() {
-            Some(p_instance) => {
-                dynamic_physics_update(p_instance);
-                fix_powerups_rotation(p_instance);
-            }
-            None => todo!(),
-        }
-
-        thread::sleep(Duration::from_secs(1));
-    });
-
-    let _ptr_base: *mut c_void = unsafe { GetModuleHandleA(PCSTR::null()) }.unwrap().0 as _;
+    physics_values_remove_protection();
+    set_physics_update_hook();
+    
+    set_message_broadcast_hook();
+    info!("Done!");
 }
 
 pub fn free(module: HMODULE) {
     log::info!("Bye from: {module:X?}");
 }
-
-// pub fn protection_disabler(target_addr: isize) {
-
-// }
 
 fn init_logs() {
     let cfg = ConfigBuilder::new()

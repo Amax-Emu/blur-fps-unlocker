@@ -1,4 +1,5 @@
 use actor_rotator::set_actor_rotator_hook;
+use fake_speed_update::set_fake_speed_hook;
 use log::{debug, info, LevelFilter};
 use physics_update::{physics_values_remove_protection, set_physics_update_hook};
 use simplelog::{
@@ -18,6 +19,7 @@ use windows::{
 mod actor_rotator;
 mod physics_update;
 mod ui_messages_hook;
+mod fake_speed_update;
 
 pub static EXE_BASE_ADDR: isize = 0x00400000;
 
@@ -48,6 +50,9 @@ pub fn init(module: HMODULE) {
     set_physics_update_hook();
     
     set_message_broadcast_hook();
+
+    set_fake_speed_hook();
+
     info!("Done!");
 }
 

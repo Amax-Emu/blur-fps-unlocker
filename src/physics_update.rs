@@ -9,7 +9,7 @@ use windows::{
     },
 };
 
-use crate::EXE_BASE_ADDR;
+use crate::{fake_speed_update::FAKE_PHYSICS_STABILIZATION_RATE, EXE_BASE_ADDR};
 
 //void __fastcall .Game::C_GameWorld::UpdatePhysics(int param_1)
 static_detour! {
@@ -48,6 +48,7 @@ pub struct CApplicationInstance {
 const TIMESTEP_PTR: isize = 0x00E648B8;
 const TIMESTEP_SIZE_PTR: isize = 0x00E65A2C;
 const MAX_PHYSICS_UPDATE_PTR: isize = 0x0111C6A4;
+
 
 const INS_CALL_LEN: isize = 4;
 
@@ -92,6 +93,7 @@ fn fake_physics_update(_self: *mut c_void) {
     let timestep_size: f32 = 1.0 / timestep; //in base ps3 code equal 0.01666667
     let physics_updates = (0.07 * timestep).round() as u32; //in base ps3 code equal 4. It's effect is rather unknown, but I update it anyway
 
+    //Horrible, replace with direct ptrs for optimization
     let ingame_timestep = ptr_base.wrapping_byte_offset(TIMESTEP_PTR - EXE_BASE_ADDR) as *mut f32;
     let ingame_timestep_size =
         ptr_base.wrapping_byte_offset(TIMESTEP_SIZE_PTR - EXE_BASE_ADDR) as *mut f32;
@@ -132,6 +134,9 @@ pub fn physics_values_remove_protection() {
     let ingame_max_physics_updates =
         ptr_base.wrapping_byte_offset(MAX_PHYSICS_UPDATE_PTR - EXE_BASE_ADDR) as *mut i32;
 
+    let fake_physics_stabilization_rate =
+        ptr_base.wrapping_byte_offset(FAKE_PHYSICS_STABILIZATION_RATE - EXE_BASE_ADDR) as *mut i32;
+
     unsafe {
         VirtualProtect(
             ingame_timestep as _,
@@ -161,4 +166,17 @@ pub fn physics_values_remove_protection() {
         )
         .unwrap()
     };
+
+    //Fake physics 
+
+    unsafe {
+        VirtualProtect(
+            fake_physics_stabilization_rate as _,
+            INS_CALL_LEN as usize,
+            tmp_flags,
+            src_flags,
+        )
+        .unwrap()
+    };
+
 }

@@ -43,9 +43,9 @@ pub fn get_value() -> u64 {
 
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
-struct Message {
-    message_type: u32,
-    size: u32,
+pub struct Message {
+    pub message_type: u32,
+    pub size: u32,
 }
 
 //0xA2193008 render UI layer

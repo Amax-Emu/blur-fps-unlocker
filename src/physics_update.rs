@@ -9,7 +9,7 @@ use windows::{
     },
 };
 
-use crate::{fake_speed_update::FAKE_PHYSICS_STABILIZATION_RATE, EXE_BASE_ADDR};
+use crate::{fake_speed_update::{FAKE_PHYSICS_ACCELERATE_STABILIZE, FAKE_PHYSICS_ACCELERATE_STABILIZE_RATE}, EXE_BASE_ADDR};
 
 //void __fastcall .Game::C_GameWorld::UpdatePhysics(int param_1)
 static_detour! {
@@ -134,8 +134,11 @@ pub fn physics_values_remove_protection() {
     let ingame_max_physics_updates =
         ptr_base.wrapping_byte_offset(MAX_PHYSICS_UPDATE_PTR - EXE_BASE_ADDR) as *mut i32;
 
+        let fake_physics_stabilization =
+        ptr_base.wrapping_byte_offset(FAKE_PHYSICS_ACCELERATE_STABILIZE - EXE_BASE_ADDR) as *mut i32;
+
     let fake_physics_stabilization_rate =
-        ptr_base.wrapping_byte_offset(FAKE_PHYSICS_STABILIZATION_RATE - EXE_BASE_ADDR) as *mut i32;
+        ptr_base.wrapping_byte_offset(FAKE_PHYSICS_ACCELERATE_STABILIZE_RATE - EXE_BASE_ADDR) as *mut i32;
 
     unsafe {
         VirtualProtect(
@@ -172,6 +175,16 @@ pub fn physics_values_remove_protection() {
     unsafe {
         VirtualProtect(
             fake_physics_stabilization_rate as _,
+            INS_CALL_LEN as usize,
+            tmp_flags,
+            src_flags,
+        )
+        .unwrap()
+    };
+
+    unsafe {
+        VirtualProtect(
+            fake_physics_stabilization as _,
             INS_CALL_LEN as usize,
             tmp_flags,
             src_flags,
